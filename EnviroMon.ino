@@ -23,6 +23,12 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
+#define VRX_PIN 34  // Joystick X-axis
+
+int currentMode = 1;
+int prevMode = 1;  // 1 = functionOne, 2 = functionTwo
+const int flickThreshold = 500;  // How far joystick must move from center to count as a flick
+const int centerValue = 2812; 
 // ---------------------- WIFI + MQTT ---------------------
 const char* ssid = "Galaxy M21 2021 Edition825A";
 const char* password = "yuvi2000";
@@ -86,9 +92,10 @@ void setupCerts() {
 void drawMyImage(int startX, int startY) {
   int index = 0;
   for (int y = 0; y < 42; y++) {
-    for (int x = 0; x < 20; x++) {
+    for (int x = 0; x < 40; x = x + 2) {
       uint32_t color = myImage[index++];
       tft.drawPixel(startX + x, startY + y, color);
+      tft.drawPixel(startX + x +1, startY + y, color);
     }
   }
 }
@@ -184,11 +191,14 @@ void setup() {
   // client.setServer(mqtt_server, mqtt_port);
   // connectAWS();
   // printStatus("AWS Connected.");
-  
+  currentMode = 1;
+
 }
 
 // ---------------------- MAIN LOOP ---------------------
-void loop() {
+
+void screen1(int s)
+{
   // if (!client.connected()) connectAWS();
   // client.loop();
 
@@ -200,13 +210,35 @@ void loop() {
     return;
   }
   // Update UI only if values change
-  if (temp != lastTemp || hum != lastHum) {
+  if (temp != lastTemp || hum != lastHum || s == 1) {
     lastTemp = temp;
     lastHum = hum;
     drawBarGraph(temp, hum); 
     Serial.println("UI updated.");
   }
-  drawMyImage(130, 25);
+  // drawMyImage(118, 30);
+  // delay(1000);
+  // tft.fillRect(118, 30, 160, 42, ST77XX_BLACK);
+  // // Publish to MQTT every minute
+  // unsigned long now = millis();
+  // if (now - lastPublishTime > publishInterval) {
+  //   lastPublishTime = now;
+
+  //   String payload = "{";
+  //   payload += "\"temperature\":";
+  //   payload += String(temp, 1);
+  //   payload += ",\"humidity\":";
+  //   payload += String(hum, 1);
+  //   payload += "}";
+
+  //   client.publish(mqtt_topic, payload.c_str());
+  //   Serial.println("MQTT published: " + payload);
+  // }
+ // Sensor polling interval
+}
+void screen2()
+{
+  tft.fillRect(0, 0, 160, 128, ST77XX_BLACK);
   // Publish to MQTT every minute
   // unsigned long now = millis();
   // if (now - lastPublishTime > publishInterval) {
@@ -222,6 +254,33 @@ void loop() {
   //   client.publish(mqtt_topic, payload.c_str());
   //   Serial.println("MQTT published: " + payload);
   // }
-
-  delay(2000);  // Sensor polling interval
+ // Sensor polling interval
 }
+void loop() {
+  int xValue = analogRead(VRX_PIN);
+  Serial.println(xValue);
+   if (xValue > centerValue + flickThreshold) {
+    currentMode = 2;
+    screen2();
+    Serial.println("Switched to Mode 2");
+    delay(100);  // Debounce/flick delay
+  }
+
+  // Detect left flick
+  else if (xValue < centerValue - flickThreshold) {
+    currentMode = 1;
+    screen1(1);
+    Serial.println("Switched to Mode 1");
+    delay(100);  // Debounce/flick delay
+  }
+
+  // Call current mode's function
+  if (currentMode == 1) {
+    screen1(0);
+  } 
+  else {
+    screen2();
+  }
+
+  delay(100);  // General loop delay
+  }
